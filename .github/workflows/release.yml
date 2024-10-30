@@ -1,6 +1,11 @@
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and release"
+        required: true
 name: Upload Release Asset
 jobs:
   release:
@@ -8,41 +13,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.x
+          go-version: "stable"
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Build binaries
         run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "mkcert-$(git describe --tags)-linux-amd64" -ldflags "-X main.Version=$(git describe --tags)"
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build -o "mkcert-$(git describe --tags)-linux-arm" -ldflags "-X main.Version=$(git describe --tags)"
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o "mkcert-$(git describe --tags)-linux-arm64" -ldflags "-X main.Version=$(git describe --tags)"
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o "mkcert-$(git describe --tags)-darwin-amd64" -ldflags "-X main.Version=$(git describe --tags)"
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o "mkcert-$(git describe --tags)-darwin-arm64" -ldflags "-X main.Version=$(git describe --tags)"
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o "mkcert-$(git describe --tags)-windows-amd64.exe" -ldflags "-X main.Version=$(git describe --tags)"
-          CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o "mkcert-$(git describe --tags)-windows-arm64.exe" -ldflags "-X main.Version=$(git describe --tags)"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "mkcert-${{ inputs.tag }}-linux-amd64" -ldflags "-X main.Version=${{ inputs.tag }}"
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build -o "mkcert-${{ inputs.tag }}-linux-arm" -ldflags "-X main.Version=${{ inputs.tag }}"
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o "mkcert-${{ inputs.tag }}-linux-arm64" -ldflags "-X main.Version=${{ inputs.tag }}"
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o "mkcert-${{ inputs.tag }}-darwin-amd64" -ldflags "-X main.Version=${{ inputs.tag }}"
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o "mkcert-${{ inputs.tag }}-darwin-arm64" -ldflags "-X main.Version=${{ inputs.tag }}"
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o "mkcert-${{ inputs.tag }}-windows-amd64.exe" -ldflags "-X main.Version=${{ inputs.tag }}"
+          CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o "mkcert-${{ inputs.tag }}-windows-arm64.exe" -ldflags "-X main.Version=${{ inputs.tag }}"
       - name: Upload release artifacts
-        uses: actions/github-script@v3
+        uses: softprops/action-gh-release@v2
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require("fs").promises;
-            const { repo: { owner, repo }, sha } = context;
-
-            const release = await github.repos.getReleaseByTag({
-              owner, repo,
-              tag: process.env.GITHUB_REF.replace("refs/tags/", ""),
-            });
-            console.log("Release:", { release });
-
-            for (let file of await fs.readdir(".")) {
-              if (!file.startsWith("mkcert-")) continue;
-              console.log("Uploading", file);
-              await github.repos.uploadReleaseAsset({
-                owner, repo,
-                release_id: release.data.id,
-                name: file,
-                data: await fs.readFile(file),
-              });
-            }
+          files: |
+            mkcert-*
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ inputs.tag }}
